@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ExternalClientApplication xmlns="http://soap.sforce.com/2006/04/metadata">
+    <contactEmail>kiremitcioglu.okan@gmail.com</contactEmail>
+    <description>n8n integration for the Clay enrichment flow</description>
+    <distributionState>Local</distributionState>
+    <isProtected>false</isProtected>
+    <label>n8n</label>
+</ExternalClientApplication>
