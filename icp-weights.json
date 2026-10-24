@@ -1,0 +1,13 @@
+{
+  "version": "v1",
+  "volume_band": {"Under 1k": 5, "1k-10k": 12, "10k-100k": 20, "Over 100k": 25, "Unknown": 0},
+  "multi_country_or_us": 15,
+  "iot_roles_open": 15,
+  "launch_or_funding_12m": 10,
+  "legacy_2g3g": 10,
+  "esim_or_sgp32": 10,
+  "provider_named": 5,
+  "min_employees": 20,
+  "tier_a": 60,
+  "tier_b": 40
+}

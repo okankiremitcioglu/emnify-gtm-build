@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>IoT_Vertical__c</fullName>
+    <label>IoT Vertical</label>
+    <description>Segment for reporting</description>
+    <type>Picklist</type>
+    <valueSet>
+        <restricted>true</restricted>
+        <valueSetDefinition>
+            <sorted>false</sorted>
+            <value><fullName>Fleet and mobility</fullName><default>false</default><label>Fleet and mobility</label></value>
+            <value><fullName>EV charging and energy</fullName><default>false</default><label>EV charging and energy</label></value>
+            <value><fullName>Asset tracking and logistics</fullName><default>false</default><label>Asset tracking and logistics</label></value>
+            <value><fullName>Point of sale</fullName><default>false</default><label>Point of sale</label></value>
+            <value><fullName>Healthcare</fullName><default>false</default><label>Healthcare</label></value>
+            <value><fullName>Security</fullName><default>false</default><label>Security</label></value>
+            <value><fullName>Industrial</fullName><default>false</default><label>Industrial</label></value>
+            <value><fullName>Consumer devices</fullName><default>false</default><label>Consumer devices</label></value>
+            <value><fullName>Other</fullName><default>false</default><label>Other</label></value>
+        </valueSetDefinition>
+    </valueSet>
+</CustomField>

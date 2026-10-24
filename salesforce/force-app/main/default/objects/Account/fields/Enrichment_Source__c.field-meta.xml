@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>Enrichment_Source__c</fullName>
+    <label>Enrichment Source</label>
+    <description>e.g. Clay+n8n v1</description>
+    <type>Text</type>
+    <length>50</length>
+</CustomField>

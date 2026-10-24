@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ListView xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>Tier_A_from_Clay</fullName>
+    <label>Tier A from Clay</label>
+    <filterScope>Everything</filterScope>
+    <filters><field>Account.Enrichment_Source__c</field><operation>contains</operation><value>Clay</value></filters>
+    <filters><field>Account.ICP_Tier__c</field><operation>equals</operation><value>A</value></filters>
+    <columns>ACCOUNT.NAME</columns>
+    <columns>Account.ICP_Score__c</columns>
+    <columns>Account.IoT_Vertical__c</columns>
+    <columns>Account.Device_Volume_Band__c</columns>
+    <columns>Account.Why_Now__c</columns>
+    <columns>Account.Enriched_At__c</columns>
+</ListView>

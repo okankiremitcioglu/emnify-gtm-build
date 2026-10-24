@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>Current_IoT_Provider__c</fullName>
+    <label>Current IoT Provider</label>
+    <description>Competitor named in public sources</description>
+    <type>Text</type>
+    <length>100</length>
+</CustomField>
