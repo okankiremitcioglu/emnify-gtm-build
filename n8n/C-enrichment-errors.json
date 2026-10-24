@@ -1,0 +1,61 @@
+{
+  "name": "Enrichment errors",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "17a40be6-155d-42f9-a10f-12a709d49c85",
+      "name": "Error Trigger",
+      "type": "n8n-nodes-base.errorTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://orgfarm-734be04959-dev-ed.develop.my.salesforce.com/services/data/v62.0/sobjects/Enrichment_Log__c",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "salesforceOAuth2Api",
+        "options": {},
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ Workflow__c: ($json.workflow.name || '').slice(0, 100), Status__c: 'Error', Reason__c: (($json.execution.lastNodeExecuted || '') + ': ' + ($json.execution.error?.message || '')).slice(0, 255), Payload__c: JSON.stringify($json.execution).slice(0, 32000) }) }}"
+      },
+      "id": "de1d2887-e2dc-41b3-a924-832b98a5957c",
+      "name": "Log error",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        220,
+        300
+      ],
+      "credentials": {
+        "salesforceOAuth2Api": {
+          "name": "Salesforce account"
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 2000
+    }
+  ],
+  "connections": {
+    "Error Trigger": {
+      "main": [
+        [
+          {
+            "node": "Log error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "pinData": {}
+}

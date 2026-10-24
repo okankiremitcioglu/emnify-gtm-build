@@ -1,0 +1,11 @@
+{
+  "domain": "acme-telematics.example",
+  "first_name": "Jane",
+  "last_name": "Doe",
+  "title": "Head of IoT",
+  "email": "jane.doe@acme-telematics.example",
+  "email_status": "Valid",
+  "linkedin_url": "https://www.linkedin.com/in/jane-doe-example/",
+  "persona": "Technical decision maker",
+  "opener": "Saw the US tracker launch in March; moving LTE-M devices across borders is usually where carrier contracts start to hurt."
+}

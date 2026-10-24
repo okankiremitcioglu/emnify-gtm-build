@@ -1,0 +1,379 @@
+{
+  "name": "Clay to Salesforce, Contacts",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "clay-contact",
+        "authentication": "headerAuth",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "441600d1-71d9-478f-9467-99ab272aec4f",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        0,
+        300
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "name": "Clay webhook key"
+        }
+      },
+      "webhookId": "f2ac93e0-fef5-439f-9b34-39eaa1b3d694"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Clean the contact from Clay. The upsert key is the lowercase email,\n// or \"li:<profile slug>\" when there is no email.\nconst SF = 'https://orgfarm-734be04959-dev-ed.develop.my.salesforce.com';\nconst PERSONAS = ['Technical decision maker', 'Economic buyer', 'Champion'];\nconst STATUSES = ['Valid', 'Risky', 'Unknown'];\nconst cut = (v, n) => (v ? String(v).slice(0, n) : null);\n\nreturn $input.all().map(item => {\n  const d = item.json.body ?? item.json;\n  const domain = String(d.domain ?? '').toLowerCase().trim()\n    .replace(/^https?:\\/\\//, '').replace(/^www\\./, '').split('/')[0];\n  const email = String(d.email ?? '').toLowerCase().trim();\n  const linkedin = String(d.linkedin_url ?? '').trim();\n  const slug = (linkedin.match(/linkedin\\.com\\/in\\/([^/?#]+)/i) || [])[1];\n  const contactKey = email || (slug ? `li:${slug.toLowerCase()}` : '');\n  const lastName = String(d.last_name ?? '').trim();\n\n  let reason = '';\n  if (!domain) reason = 'missing domain';\n  else if (!contactKey) reason = 'no email and no LinkedIn URL';\n  else if (!lastName) reason = 'missing last name';\n\n  const contact = {\n    FirstName: cut(d.first_name, 40),\n    LastName: lastName,\n    Title: cut(d.title, 128),\n    LinkedIn_URL__c: linkedin || null,\n    Persona__c: PERSONAS.includes(d.persona) ? d.persona : null,\n    Opener__c: cut(d.opener, 1000),\n    Email_Status__c: STATUSES.includes(d.email_status) ? d.email_status : 'Unknown',\n  };\n  if (email) contact.Email = email;\n\n  // Escape quotes so the domain is safe inside SOQL.\n  const soqlDomain = domain.replace(/\\\\/g, '\\\\\\\\').replace(/'/g, \"\\\\'\");\n  return { json: { valid: !reason, reason, domain, soqlDomain, contactKey, sf_url: SF, contact, raw: d } };\n});\n"
+      },
+      "id": "4fc7bf79-f109-44b2-9f63-119c2601b4ee",
+      "name": "Normalize",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        220,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "f22e229f-95b6-453e-b23e-7578979fac6b",
+              "leftValue": "={{ $json.valid }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "9f36525a-08ec-4bd4-b78a-fc66db78b633",
+      "name": "Valid",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        440,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=https://orgfarm-734be04959-dev-ed.develop.my.salesforce.com/services/data/v62.0/query",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "salesforceOAuth2Api",
+        "options": {},
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "q",
+              "value": "=SELECT Id FROM Account WHERE Domain__c = '{{ $json.soqlDomain }}' LIMIT 1"
+            }
+          ]
+        }
+      },
+      "id": "17586d34-8fcf-4bed-b069-1692b8aefa52",
+      "name": "Find account",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        660,
+        200
+      ],
+      "credentials": {
+        "salesforceOAuth2Api": {
+          "name": "Salesforce account"
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 2000
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "77fbdae1-63d7-431f-8916-0fef4a3762d4",
+              "leftValue": "={{ $json.totalSize }}",
+              "rightValue": 0,
+              "operator": {
+                "type": "number",
+                "operation": "gt"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "02cf3f36-a2c2-4f02-a0e3-7b2285b6a7bf",
+      "name": "Account found",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        880,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "method": "PATCH",
+        "url": "=https://orgfarm-734be04959-dev-ed.develop.my.salesforce.com/services/data/v62.0/sobjects/Contact/Contact_Key__c/{{ encodeURIComponent($('Normalize').item.json.contactKey) }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "salesforceOAuth2Api",
+        "options": {},
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ ...$('Normalize').item.json.contact, AccountId: $json.records[0].Id }) }}"
+      },
+      "id": "22791986-5c46-49f7-ba40-8cb1282774ee",
+      "name": "Upsert Contact",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1100,
+        100
+      ],
+      "credentials": {
+        "salesforceOAuth2Api": {
+          "name": "Salesforce account"
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 2000
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ status: 'ok', contact_id: $json.id, created: $json.created }) }}",
+        "options": {}
+      },
+      "id": "d3f84417-a7aa-4d77-ace6-3be28b95c5ad",
+      "name": "Respond OK",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        1320,
+        100
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://orgfarm-734be04959-dev-ed.develop.my.salesforce.com/services/data/v62.0/sobjects/Enrichment_Log__c",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "salesforceOAuth2Api",
+        "options": {},
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ Workflow__c: 'Clay to Salesforce, Contacts', Status__c: 'Account missing', Domain__c: $('Normalize').item.json.domain, Reason__c: 'No Account with this domain yet; push the account first', Payload__c: JSON.stringify($('Normalize').item.json.raw).slice(0, 32000) }) }}"
+      },
+      "id": "c055560c-2c4e-4603-94d3-ec79f8ce51e5",
+      "name": "Log account missing",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1100,
+        300
+      ],
+      "credentials": {
+        "salesforceOAuth2Api": {
+          "name": "Salesforce account"
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 2000
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ status: 'account_missing' }) }}",
+        "options": {}
+      },
+      "id": "7a85a0c3-743a-4262-a693-1d9f4769f69b",
+      "name": "Respond account missing",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        1320,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://orgfarm-734be04959-dev-ed.develop.my.salesforce.com/services/data/v62.0/sobjects/Enrichment_Log__c",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "salesforceOAuth2Api",
+        "options": {},
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ Workflow__c: 'Clay to Salesforce, Contacts', Status__c: 'Skipped', Domain__c: ($json.domain || '').slice(0, 255), Reason__c: $json.reason, Payload__c: JSON.stringify($json.raw).slice(0, 32000) }) }}"
+      },
+      "id": "26dfb59d-d0b6-4221-8616-f109bdb4b2db",
+      "name": "Log rejected",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        660,
+        460
+      ],
+      "credentials": {
+        "salesforceOAuth2Api": {
+          "name": "Salesforce account"
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 2000
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ status: 'skipped', reason: $('Normalize').first().json.reason }) }}",
+        "options": {}
+      },
+      "id": "ea29988c-f655-4160-9032-8d6d512f0199",
+      "name": "Respond skipped",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        880,
+        460
+      ]
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Normalize",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize": {
+      "main": [
+        [
+          {
+            "node": "Valid",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Valid": {
+      "main": [
+        [
+          {
+            "node": "Find account",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Log rejected",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Find account": {
+      "main": [
+        [
+          {
+            "node": "Account found",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Account found": {
+      "main": [
+        [
+          {
+            "node": "Upsert Contact",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Log account missing",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Upsert Contact": {
+      "main": [
+        [
+          {
+            "node": "Respond OK",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Log account missing": {
+      "main": [
+        [
+          {
+            "node": "Respond account missing",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Log rejected": {
+      "main": [
+        [
+          {
+            "node": "Respond skipped",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "pinData": {}
+}

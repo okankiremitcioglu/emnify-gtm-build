@@ -1,0 +1,415 @@
+{
+  "name": "Clay to Salesforce, Accounts",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "clay-account",
+        "authentication": "headerAuth",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "c716a58e-9560-405c-8070-271a739717d0",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        0,
+        300
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "name": "Clay webhook key"
+        }
+      },
+      "webhookId": "85aaa920-63e7-47e4-a6d7-c19039cd6471"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Clean the payload from Clay and build the Salesforce Account body.\n// Picklists in Salesforce are restricted, so unknown values fall back to a safe default.\nconst SF = 'https://orgfarm-734be04959-dev-ed.develop.my.salesforce.com';\nconst VERTICALS = ['Fleet and mobility', 'EV charging and energy', 'Asset tracking and logistics',\n  'Point of sale', 'Healthcare', 'Security', 'Industrial', 'Consumer devices', 'Other'];\nconst BANDS = ['Under 1k', '1k-10k', '10k-100k', 'Over 100k', 'Unknown'];\n// The org uses country picklists, so send ISO codes for the countries we expect.\nconst COUNTRY = { germany: 'DE', deutschland: 'DE', 'united states': 'US', usa: 'US', us: 'US',\n  'united kingdom': 'GB', uk: 'GB', france: 'FR', netherlands: 'NL', sweden: 'SE', denmark: 'DK',\n  norway: 'NO', finland: 'FI', austria: 'AT', switzerland: 'CH', spain: 'ES', italy: 'IT',\n  belgium: 'BE', poland: 'PL', ireland: 'IE', israel: 'IL', canada: 'CA', 'czech republic': 'CZ',\n  czechia: 'CZ', portugal: 'PT', estonia: 'EE', lithuania: 'LT', turkey: 'TR', 'türkiye': 'TR' };\n\nconst toText = v => Array.isArray(v) ? v.join('\\n') : String(v ?? '');\nconst cut = (v, n) => (v ? String(v).slice(0, n) : null);\n\nreturn $input.all().map(item => {\n  const d = item.json.body ?? item.json;\n  const domain = String(d.domain ?? '').toLowerCase().trim()\n    .replace(/^https?:\\/\\//, '').replace(/^www\\./, '').split('/')[0];\n  const name = String(d.company_name ?? '').trim();\n  const tier = String(d.icp_tier ?? '').trim().toUpperCase();\n\n  let reason = '';\n  if (!domain || !domain.includes('.')) reason = 'missing or invalid domain';\n  else if (!name) reason = 'missing company name';\n  else if (!['A', 'B'].includes(tier)) reason = `tier ${tier || 'empty'} is not A or B`;\n\n  const version = d.rubric_version || 'v1';\n  const country = COUNTRY[String(d.country ?? '').toLowerCase().trim()];\n  const account = {\n    Name: name,\n    Website: `https://${domain}`,\n    NumberOfEmployees: Number(d.employees) || null,\n    ICP_Score__c: Math.max(0, Math.min(90, Number(d.icp_score) || 0)),\n    ICP_Tier__c: tier || null,\n    Rubric_Version__c: cut(version, 10),\n    IoT_Vertical__c: VERTICALS.includes(d.vertical) ? d.vertical : 'Other',\n    Device_Volume_Band__c: BANDS.includes(d.device_volume_band) ? d.device_volume_band : 'Unknown',\n    Connectivity_Tech__c: cut(d.connectivity_tech, 100),\n    Current_IoT_Provider__c: cut(d.current_provider, 100),\n    Why_Now__c: cut(d.why_now, 1000),\n    Signals__c: cut(toText(d.signals), 5000),\n    Source_URLs__c: cut(toText(d.source_urls), 2000),\n    Enriched_At__c: new Date().toISOString(),\n    Enrichment_Source__c: `Clay+n8n ${version}`,\n  };\n  if (country) account.BillingCountryCode = country;\n\n  return { json: { valid: !reason, reason, domain, tier, sf_url: SF, account, raw: d } };\n});\n"
+      },
+      "id": "648c91d5-5db2-4aa4-8d61-75548fdb8c7e",
+      "name": "Normalize",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        220,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "30ae794d-3d0e-4cbe-a866-d1b36db67184",
+              "leftValue": "={{ $json.valid }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "50676f4b-fa3d-4ce0-a657-8248b2c967ba",
+      "name": "Valid and A or B",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        440,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "PATCH",
+        "url": "={{ $json.sf_url }}/services/data/v62.0/sobjects/Account/Domain__c/{{ encodeURIComponent($json.domain) }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "salesforceOAuth2Api",
+        "options": {},
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.account) }}"
+      },
+      "id": "50ca7162-8ebd-4794-80e8-a6fd9bc4d7c3",
+      "name": "Upsert Account",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        660,
+        200
+      ],
+      "credentials": {
+        "salesforceOAuth2Api": {
+          "name": "Salesforce account"
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 2000
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "bedbd39f-a2c8-47ee-80e8-36a17a57641d",
+              "leftValue": "={{ $('Normalize').item.json.tier }}",
+              "rightValue": "A",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "8bb62bbe-4a4e-47ad-9cd7-7073e4592b7e",
+      "name": "Tier A",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        880,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=https://orgfarm-734be04959-dev-ed.develop.my.salesforce.com/services/data/v62.0/query",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "salesforceOAuth2Api",
+        "options": {},
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "q",
+              "value": "=SELECT Id FROM Task WHERE WhatId = '{{ $('Upsert Account').item.json.id }}' AND Subject = 'Tier A: review Clay research' AND IsClosed = false"
+            }
+          ]
+        }
+      },
+      "id": "bea5118b-1ca7-432e-84aa-6f18dc1396f9",
+      "name": "Find open task",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1100,
+        100
+      ],
+      "credentials": {
+        "salesforceOAuth2Api": {
+          "name": "Salesforce account"
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 2000
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "48a6e1fd-ef48-460e-b867-ff8038b503ad",
+              "leftValue": "={{ $json.totalSize }}",
+              "rightValue": 0,
+              "operator": {
+                "type": "number",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "40aca308-d8f0-4a83-8e2c-ad02ad659366",
+      "name": "No open task",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1320,
+        100
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://orgfarm-734be04959-dev-ed.develop.my.salesforce.com/services/data/v62.0/sobjects/Task",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "salesforceOAuth2Api",
+        "options": {},
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ Subject: 'Tier A: review Clay research', WhatId: $('Upsert Account').item.json.id, ActivityDate: $now.plus({days: 1}).toFormat('yyyy-MM-dd'), Priority: 'High', Status: 'Not Started', Description: [$('Normalize').item.json.account.Why_Now__c, $('Normalize').item.json.account.Signals__c].filter(Boolean).join('\\n\\n') }) }}"
+      },
+      "id": "9bfe328e-e82d-410c-bf93-5f9b0416d190",
+      "name": "Create task",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1540,
+        0
+      ],
+      "credentials": {
+        "salesforceOAuth2Api": {
+          "name": "Salesforce account"
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 2000
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ status: 'ok', account_id: $('Upsert Account').first().json.id, created: $('Upsert Account').first().json.created, tier: $('Normalize').first().json.tier }) }}",
+        "options": {}
+      },
+      "id": "446ad289-28ba-4cac-8c73-9c7b655bc4b1",
+      "name": "Respond OK",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        1760,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://orgfarm-734be04959-dev-ed.develop.my.salesforce.com/services/data/v62.0/sobjects/Enrichment_Log__c",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "salesforceOAuth2Api",
+        "options": {},
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ Workflow__c: 'Clay to Salesforce, Accounts', Status__c: 'Skipped', Domain__c: ($json.domain || '').slice(0, 255), Reason__c: $json.reason, Payload__c: JSON.stringify($json.raw).slice(0, 32000) }) }}"
+      },
+      "id": "420a1fe7-e699-4ace-911a-0681c122ad09",
+      "name": "Log rejected",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        660,
+        420
+      ],
+      "credentials": {
+        "salesforceOAuth2Api": {
+          "name": "Salesforce account"
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 2000
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ status: 'skipped', reason: $('Normalize').first().json.reason }) }}",
+        "options": {}
+      },
+      "id": "a551f949-4e7a-44cb-a85f-e16422dba556",
+      "name": "Respond skipped",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        880,
+        420
+      ]
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Normalize",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize": {
+      "main": [
+        [
+          {
+            "node": "Valid and A or B",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Valid and A or B": {
+      "main": [
+        [
+          {
+            "node": "Upsert Account",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Log rejected",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Upsert Account": {
+      "main": [
+        [
+          {
+            "node": "Tier A",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Tier A": {
+      "main": [
+        [
+          {
+            "node": "Find open task",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond OK",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Find open task": {
+      "main": [
+        [
+          {
+            "node": "No open task",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "No open task": {
+      "main": [
+        [
+          {
+            "node": "Create task",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond OK",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create task": {
+      "main": [
+        [
+          {
+            "node": "Respond OK",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Log rejected": {
+      "main": [
+        [
+          {
+            "node": "Respond skipped",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "pinData": {}
+}

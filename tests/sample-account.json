@@ -1,0 +1,16 @@
+{
+  "company_name": "Acme Telematics GmbH",
+  "domain": "https://www.acme-telematics.example/en",
+  "country": "Germany",
+  "employees": 240,
+  "vertical": "Fleet and mobility",
+  "icp_score": 72,
+  "icp_tier": "A",
+  "rubric_version": "v1",
+  "device_volume_band": "10k-100k",
+  "connectivity_tech": "LTE-M",
+  "current_provider": "",
+  "why_now": "Launched a US tracker in March and is hiring two LTE-M firmware engineers.",
+  "signals": ["US product launch, March 2026", "2 embedded firmware roles open"],
+  "source_urls": ["https://acme-telematics.example/news"]
+}
